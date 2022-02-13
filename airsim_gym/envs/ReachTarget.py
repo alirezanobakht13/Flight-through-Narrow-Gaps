@@ -1,4 +1,4 @@
-from turtle import position
+import time
 import gym
 from gym import error, spaces, utils
 from gym.utils import seeding
@@ -6,6 +6,7 @@ from gym import spaces
 import numpy as np
 import airsim as air
 from airsim.types import Pose,Quaternionr,Vector3r
+import logging
 
 class AirsimGymReachTarget(gym.Env):
     metadata = {'render.modes':["rgb_array"]}
@@ -14,13 +15,15 @@ class AirsimGymReachTarget(gym.Env):
     ip_address="127.0.0.1",
     port=41451,
     movement_size=0.25,
-    target_init_x=10,
+    max_distance=20,
+    target_init_x=0,
     target_init_y=10,
-    target_init_z=-10,
-    target_x_movement_range=5,
-    target_y_movement_range=5,
-    target_z_movement_range=5,
-    target_name="myobject") -> None:
+    target_init_z=-2,
+    target_x_movement_range=2,
+    target_y_movement_range=2,
+    target_z_movement_range=2,
+    target_name="myobject",
+    max_timestep=10000) -> None:
         super().__init__()
 
         self.observation_space = spaces.Dict({
@@ -85,28 +88,64 @@ class AirsimGymReachTarget(gym.Env):
         self.target_name=target_name
 
         self.movement_size=movement_size
+        self.max_distance=max_distance
+        self.max_timestep = max_timestep
+        self.timestep_count = 0
+
+        self.pre_time = time.time()
+
+        self.info = dict()
     
     def reset(self):
         self.drone.reset()
         self.drone.enableApiControl(True)
         self.drone.armDisarm(True)
 
-        self.state['target_position'] = self._setup_target_position()
-
         self.drone.takeoffAsync().join()
+        logging.info("drone tookoff")
+
+        self.state['target_position'] = self._setup_target_position()
+        
+        self.state['time_passed_from_previous_step'] = np.zeros((1,),dtype=np.float32)
 
         self._compute_state()
+
+        self.pre_time = time.time()
+        self.timestep_count = 0
 
         return self.state
     
     def step(self,action):
-        NotImplementedError()
+        self.timestep_count += 1
+
+        offset = self._interpret_action(action)
+
+        vel = self.drone.getMultirotorState().kinematics_estimated.linear_velocity
+
+        self.drone.moveByVelocityAsync(
+            vel.x_val + offset[0],
+            vel.y_val + offset[1],
+            vel.z_val + offset[2],
+            1
+        )
+
+        reward,done = self._reward_done()
+
+        self._compute_state()
+
+        self.state['time_passed_from_previous_step'] = np.array([time.time()-self.pre_time,],dtype=np.float32)
+
+        self.pre_time = time.time()
+
+        return self.state,reward,done,self.info
 
     def render(self,mode='rgb_array'):
-        raise NotImplementedError()
+        return self.state
     
     def close(self):
-        raise NotImplementedError()
+        self.drone.armDisarm(False)
+        self.drone.reset()
+        self.drone.enableApiControl(False)
 
     def _setup_target_position(self):
         x = self.target_init_x + np.random.uniform(
@@ -142,5 +181,49 @@ class AirsimGymReachTarget(gym.Env):
         o_z = k.orientation.z_val
         self.state['orientation'] = np.array([o_w,o_x,o_y,o_z],dtype=np.float32)
 
-        # TODO Complete Other states
-        # TODO Set time_passed_from_previous_step in step function
+        lv_x = k.linear_velocity.x_val
+        lv_y = k.linear_velocity.y_val
+        lv_z = k.linear_velocity.z_val
+        self.state['linear_velocity'] = np.array([lv_x,lv_y,lv_z],dtype=np.float32)
+
+        av_x = k.angular_velocity.x_val
+        av_y = k.angular_velocity.y_val
+        av_z = k.angular_velocity.z_val
+        self.state['angular_velocity'] = np.array([av_x,av_y,av_z],dtype=np.float32)
+
+    def _reward_done(self):
+        if self.drone.simGetCollisionInfo().has_collided:
+            return -200,True
+        
+        distance = np.linalg.norm(self.state['position']
+                                - self.state['target_position'])
+        
+        y_axis_distance = (self.state['position'] - self.state['target_position'])[1]
+
+        if y_axis_distance>0: # Passed from the gate plane
+            if distance < 0.5: # passed through the gate
+                return 200,True
+            else:
+                return -50,True
+        
+        if distance > self.max_distance or self.timestep_count > self.max_timestep:
+            return -distance,True
+
+        return -distance,False
+
+    def _interpret_action(self,action):
+        offset = np.zeros((3,),dtype=np.float32)
+        if action == 0:
+            offset = np.array([0,0,-self.movement_size],dtype=np.float32)
+        if action == 1:
+            offset = np.array([0,0, self.movement_size],dtype=np.float32)
+        if action == 2:
+            offset = np.array([0, self.movement_size,0],dtype=np.float32)
+        if action == 3:
+            offset = np.array([0,-self.movement_size,0],dtype=np.float32)
+        if action == 4:
+            offset = np.array([-self.movement_size,0,0],dtype=np.float32)
+        if action == 5:
+            offset = np.array([ self.movement_size,0,0],dtype=np.float32)
+        
+        return offset
