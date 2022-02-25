@@ -23,7 +23,11 @@ class AirsimGymReachTarget(gym.Env):
     target_y_movement_range=2,
     target_z_movement_range=2,
     target_name="myobject",
-    max_timestep=10000) -> None:
+    max_timestep=10000,
+    accident_reward=-10,
+    success_reward= 30,
+    time_or_distance_limit_passed_reward=-10,
+    distance_coefficient = 1) -> None:
         super().__init__()
 
         self.observation_space = spaces.Dict({
@@ -91,8 +95,13 @@ class AirsimGymReachTarget(gym.Env):
         self.max_distance=max_distance
         self.max_timestep = max_timestep
         self.timestep_count = 0
+        self.accident_reward = accident_reward
+        self.success_reward = success_reward
+        self.time_or_distance_limit_passed_reward = time_or_distance_limit_passed_reward
+        self.distance_coefficient = distance_coefficient
 
         self.pre_time = time.time()
+        self.pre_distance = 0
 
         self.info = dict()
     
@@ -109,6 +118,8 @@ class AirsimGymReachTarget(gym.Env):
         self.state['time_passed_from_previous_step'] = np.zeros((1,),dtype=np.float32)
 
         self._compute_state()
+        self.pre_distance = np.linalg.norm(self.state['position']
+                                - self.state['target_position'])
 
         self.pre_time = time.time()
         self.timestep_count = 0
@@ -192,24 +203,29 @@ class AirsimGymReachTarget(gym.Env):
         self.state['angular_velocity'] = np.array([av_x,av_y,av_z],dtype=np.float32)
 
     def _reward_done(self):
-        if self.drone.simGetCollisionInfo().has_collided:
-            return -200,True
-        
+
         distance = np.linalg.norm(self.state['position']
                                 - self.state['target_position'])
+
+        delta_dinstance = self.pre_distance - distance
+        reward = self.distance_coefficient * delta_dinstance
+        self.pre_distance = distance
+
+        if self.drone.simGetCollisionInfo().has_collided:
+            return self.accident_reward,True
         
         y_axis_distance = (self.state['position'] - self.state['target_position'])[1]
 
         if y_axis_distance>0: # Passed from the gate plane
             if distance < 0.5: # passed through the gate
-                return 200,True
+                return self.success_reward,True
             else:
-                return -50,True
+                return reward,True
         
         if distance > self.max_distance or self.timestep_count > self.max_timestep:
-            return -distance,True
+            return self.time_or_distance_limit_passed_reward,True
 
-        return -distance,False
+        return reward,False
 
     def _interpret_action(self,action):
         offset = np.zeros((3,),dtype=np.float32)

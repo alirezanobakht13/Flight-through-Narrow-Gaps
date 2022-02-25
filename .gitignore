@@ -1,5 +1,8 @@
 # my stuff
 check.ipynb
+Examples/tb_logs
+*.npz
+checkpoints
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
