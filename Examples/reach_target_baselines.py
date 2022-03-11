@@ -3,12 +3,15 @@ stablebaseline3 is required to run this examples
 """
 
 import argparse
+from operator import mod
 import time
+from tqdm import tqdm
 
 import gym
 import airsim_gym
 from stable_baselines3 import PPO,DQN,HER,A2C
 from stable_baselines3.common.callbacks import EvalCallback,CheckpointCallback
+from stable_baselines3.common.evaluation import evaluate_policy
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.vec_env import DummyVecEnv
 import torch
@@ -59,6 +62,10 @@ if __name__ == "__main__":
                     target_x_movement_range=0.1,
                     target_y_movement_range=0.1,
                     target_z_movement_range=0.1,
+                    accident_reward=-1,
+                    success_reward= 50,
+                    time_or_distance_limit_passed_reward=-1,
+                    distance_coefficient = 30
                 )
             )
         ]
@@ -68,7 +75,7 @@ if __name__ == "__main__":
         
         if args.algorithm == 'ppo':
 
-            policy_kwargs = dict(net_arch=[dict(pi=[128, 256, 128], vf=[128, 256, 128])])
+            policy_kwargs = dict(net_arch=[dict(pi=[256,256,256], vf=[256,256,256])])
 
             model = PPO(
                     "MultiInputPolicy",
@@ -76,7 +83,8 @@ if __name__ == "__main__":
                     verbose=1,
                     device=device,
                     tensorboard_log="./tb_logs/",
-                    policy_kwargs=policy_kwargs
+                    policy_kwargs=policy_kwargs,
+                    batch_size=128
                 )
 
             callbacks = []
@@ -100,10 +108,10 @@ if __name__ == "__main__":
 
             if args.load == '1':
                 print('loading best model')
-                model.load("./best_models/ppo/best_model",env)
+                model = PPO.load("./best_models/ppo/best_model",env)
             elif args.load:
                 print(f"loading model from {args.load}")
-                model.load(args.load,env)
+                model = PPO.load(args.load,env)
 
 
             model.learn(
@@ -167,3 +175,32 @@ if __name__ == "__main__":
                 tb_log_name="dqn_airsim_drone_run_" + str(time.time()),
                 **kwargs
             )
+
+    if args.mode == 'eval':
+        
+        if args.algorithm == 'ppo':
+            model = PPO.load('checkpoints/ppo_420000_steps',env)
+
+            # mean_reward, std_reward = evaluate_policy(model, env, n_eval_episodes=2)
+
+            # print(f"mean reward: {mean_reward} | std reward: {std_reward}")
+
+            episodes = 50
+
+            success = 0
+
+            for e in tqdm(range(episodes)):
+                obs = env.reset()
+
+                while True:
+                    action , _state = model.predict(obs)
+                    obs, reward, done, info = env.step(action)
+
+                    if done:
+                        if reward == 50:
+                            success += 1
+                        break
+
+            print(f"number of success {success} | total {episodes} | success rate {(success/episodes)*100}")
+
+                

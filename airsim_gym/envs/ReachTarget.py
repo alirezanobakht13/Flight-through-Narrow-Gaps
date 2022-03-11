@@ -214,10 +214,14 @@ class AirsimGymReachTarget(gym.Env):
         if self.drone.simGetCollisionInfo().has_collided:
             return self.accident_reward,True
         
-        y_axis_distance = (self.state['position'] - self.state['target_position'])[1]
+        axis_distance = (self.state['position'] - self.state['target_position'])
+        x_axis_distance = axis_distance[0]
+        y_axis_distance = axis_distance[1]
+        z_axis_distance = axis_distance[2]
 
-        if y_axis_distance>0: # Passed from the gate plane
-            if distance < 0.5: # passed through the gate
+
+        if y_axis_distance>=0: # Passed from the gate plane
+            if abs(x_axis_distance) < 2.25 and abs(z_axis_distance)< 0.75: # passed through the gate
                 return self.success_reward,True
             else:
                 return reward,True
