@@ -1,2 +1,3 @@
 import imp
 from airsim_gym.envs.ReachTarget import AirsimGymReachTarget
+from airsim_gym.envs.ReachTargetContinuous import AirsimGymReachTargetContinuous
