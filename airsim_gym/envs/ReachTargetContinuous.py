@@ -88,8 +88,8 @@ class AirsimGymReachTargetContinuous(gym.Env):
         }
 
         self.action_space = spaces.Box(
-            low=[-1.0,-1.0,-1.0,0.0],
-            high=[1.0,1.0,1.0,1.0],
+            low=np.array([-1.0,-1.0,-1.0,0.0]),
+            high=np.array([1.0,1.0,1.0,1.0]),
             dtype=np.float32
         )
         """roll_rate
@@ -147,10 +147,11 @@ class AirsimGymReachTargetContinuous(gym.Env):
         self.timestep_count += 1
 
         self.drone.moveByAngleRatesThrottleAsync(
-            action[0],
-            action[1],
-            action[2],
-            action[3]
+            float(action[0]),
+            float(action[1]),
+            float(action[2]),
+            float(action[3]),
+            0.1
         )
 
         reward,done = self._reward_done()
@@ -247,7 +248,7 @@ class AirsimGymReachTargetContinuous(gym.Env):
             if abs(x_axis_distance) < 2.25 and abs(z_axis_distance)< 0.75: # passed through the gate
                 return self.success_reward,True
             else:
-                return reward,True
+                return self.accident_reward/2,True
         
         if distance > self.max_distance or self.timestep_count > self.max_timestep:
             return self.time_or_distance_limit_passed_reward,True
