@@ -1,6 +1,7 @@
 from airsim.types import Pose,Quaternionr,Vector3r
 import airsim as air
 import numpy as np
+import time
 
 def get_orthogonal_vectors(qr: Quaternionr):
     q0 = qr.w_val
@@ -28,6 +29,9 @@ def get_orthogonal_vectors(qr: Quaternionr):
 
     return e1,e2,e3
 
+def get_angle(v1:np.ndarray, v2:np.ndarray):
+    r = np.dot(v1,v2)/(np.linalg.norm(v1)*np.linalg.norm(v2))
+    return np.degrees(np.arccos(r)), r
 
 if __name__ == "__main__":
     drone = air.MultirotorClient()
@@ -36,6 +40,8 @@ if __name__ == "__main__":
     drone.armDisarm(True)
 
     drone.takeoffAsync().join()
+
+    time.sleep(3)
 
     obj_pose = drone.simGetObjectPose("myobject")
 
@@ -46,7 +52,17 @@ if __name__ == "__main__":
     print(f"orientation: w={obj_orn.w_val}, x={obj_orn.x_val}, y={obj_orn.y_val}, z={obj_orn.z_val}")
     
     e1,e2,e3 = get_orthogonal_vectors(obj_orn)
+
+    k = drone.getMultirotorState().kinematics_estimated
+    u1,u2,u3 = get_orthogonal_vectors(k.orientation)
+
     print(f"e1 = {e1}\ne2 = {e2}\ne3 = {e3}")
+    print()
+    print(f"u1 = {u1}\nu2 = {u2}\nu3 = {u3}")
+    print()
+    print(f"e1,u1 = {get_angle(e1,u1)}")
+    print(f"e2,u2 = {get_angle(e2,u2)}")
+    print(f"e3,u3 = {get_angle(e3,u3)}")
 
     drone.armDisarm(False)
     drone.reset()

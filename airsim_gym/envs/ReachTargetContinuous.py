@@ -16,8 +16,8 @@ class AirsimGymReachTargetContinuous(gym.Env):
     port=41451,
     movement_size=0.25,
     max_distance=20,
-    target_init_x=0,
-    target_init_y=10,
+    target_init_x=10,
+    target_init_y=0,
     target_init_z=-2,
     target_x_movement_range=2,
     target_y_movement_range=2,
@@ -244,8 +244,8 @@ class AirsimGymReachTargetContinuous(gym.Env):
         z_axis_distance = axis_distance[2]
 
 
-        if y_axis_distance>=0: # Passed from the gate plane
-            if abs(x_axis_distance) < 2.25 and abs(z_axis_distance)< 0.75: # passed through the gate
+        if x_axis_distance>=0: # Passed from the gate plane
+            if abs(y_axis_distance) < 2.25 and abs(z_axis_distance)< 0.75: # passed through the gate
                 return self.success_reward,True
             else:
                 return self.accident_reward/2,True
