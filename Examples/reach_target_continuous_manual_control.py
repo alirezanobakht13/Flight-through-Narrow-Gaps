@@ -73,3 +73,16 @@ while running:
             print(f"reward: {reward}")
             print(f"done: {done}")
             print(f"state: {state}")
+        elif keyboard.is_pressed('q'):
+            obs,reward,done,state = env.step(np.array([0,0,0.2,0.5]))
+            print(f"obs: {obs}")
+            print(f"reward: {reward}")
+            print(f"done: {done}")
+            print(f"state: {state}")
+
+        elif keyboard.is_pressed('e'):
+            obs,reward,done,state = env.step(np.array([0,0,-0.2,0.5]))
+            print(f"obs: {obs}")
+            print(f"reward: {reward}")
+            print(f"done: {done}")
+            print(f"state: {state}")

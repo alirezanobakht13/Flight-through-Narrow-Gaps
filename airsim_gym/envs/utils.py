@@ -30,6 +30,14 @@ def to_orthogonal_vectors(qr: Quaternionr):
     return e1,e2,e3
 
 def get_angle(v1:np.ndarray, v2:np.ndarray):
+    """Parameters:
+    v1: vector
+    v2: vector
+
+    Returns:
+    Degree between v1 and v2,
+    Cosine between v1 and v2
+    """
     r = np.dot(v1,v2)/(np.linalg.norm(v1)*np.linalg.norm(v2))
     return np.degrees(np.arccos(r)), r
 

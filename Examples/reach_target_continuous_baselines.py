@@ -62,10 +62,9 @@ if __name__ == "__main__":
                     target_x_movement_range=1,
                     target_y_movement_range=1,
                     target_z_movement_range=1,
-                    accident_reward=-1,
+                    accident_reward= 1,
                     success_reward= 50,
                     time_or_distance_limit_passed_reward=-2,
-                    distance_coefficient = 5
                 )
             )
         ]

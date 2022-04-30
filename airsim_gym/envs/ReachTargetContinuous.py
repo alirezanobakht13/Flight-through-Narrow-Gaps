@@ -6,6 +6,7 @@ from gym import spaces
 import numpy as np
 import airsim as air
 from airsim.types import Pose,Quaternionr,Vector3r
+from . import utils
 import logging
 
 class AirsimGymReachTargetContinuous(gym.Env):
@@ -22,9 +23,12 @@ class AirsimGymReachTargetContinuous(gym.Env):
     target_x_movement_range=2,
     target_y_movement_range=2,
     target_z_movement_range=2,
+    target_yaw_range=10,
+    target_pitch_range=10,
+    target_roll_range=30,
     target_name="myobject",
     max_timestep=10000,
-    accident_reward=-10,
+    accident_reward= 10,
     success_reward= 30,
     time_or_distance_limit_passed_reward=-10,
     distance_coefficient = 1) -> None:
@@ -73,6 +77,12 @@ class AirsimGymReachTargetContinuous(gym.Env):
                 dtype=np.float32
             ),
 
+            'target_orientation':spaces.Box(
+                low=np.array([-np.inf for _ in range(4)]),
+                high=np.array([np.inf for _ in range(4)]),
+                dtype=np.float32
+            ),
+
             'time_passed_from_previous_step': spaces.Box(low=-np.inf,high=np.inf,shape=(1,),dtype=np.float32)
         })
 
@@ -84,6 +94,7 @@ class AirsimGymReachTargetContinuous(gym.Env):
             'angular_velocity':np.zeros((3,),dtype=np.float32),
             'angular_acceleration':np.zeros((3,),dtype=np.float32),
             'target_position':np.zeros((3,),dtype=np.float32),
+            'target_orientation':np.zeros((4,),dtype=np.float32),
             'time_passed_from_previous_step':np.zeros((1,),dtype=np.float32)
         }
 
@@ -106,6 +117,9 @@ class AirsimGymReachTargetContinuous(gym.Env):
         self.target_x_movement_range = target_x_movement_range
         self.target_y_movement_range = target_y_movement_range
         self.target_z_movement_range = target_z_movement_range
+        self.target_yaw_range = target_yaw_range
+        self.target_pitch_range = target_pitch_range
+        self.target_roll_range = target_roll_range
         self.target_name=target_name
 
         self.movement_size=movement_size
@@ -118,6 +132,7 @@ class AirsimGymReachTargetContinuous(gym.Env):
         self.distance_coefficient = distance_coefficient
 
         self.pre_time = time.time()
+        self.cur_time = time.time()
         self.pre_distance = 0
 
         self.info = dict()
@@ -130,7 +145,7 @@ class AirsimGymReachTargetContinuous(gym.Env):
         self.drone.takeoffAsync().join()
         logging.info("drone tookoff")
 
-        self.state['target_position'] = self._setup_target_position()
+        self.state['target_position'], self.state['target_orientation'] = self._setup_target_position()
         
         self.state['time_passed_from_previous_step'] = np.zeros((1,),dtype=np.float32)
 
@@ -154,13 +169,15 @@ class AirsimGymReachTargetContinuous(gym.Env):
             0.1
         )
 
+        self.cur_time = time.time()
+
         reward,done = self._reward_done()
 
         self._compute_state()
 
-        self.state['time_passed_from_previous_step'] = np.array([time.time()-self.pre_time,],dtype=np.float32)
+        self.state['time_passed_from_previous_step'] = np.array([self.cur_time-self.pre_time,],dtype=np.float32)
 
-        self.pre_time = time.time()
+        self.pre_time = self.cur_time
 
         return self.state,reward,done,self.info
 
@@ -184,13 +201,43 @@ class AirsimGymReachTargetContinuous(gym.Env):
         z = self.target_init_z + np.random.uniform(
             -self.target_z_movement_range,
             self.target_z_movement_range)
+        
+        yaw = np.random.uniform(
+            -self.target_yaw_range,
+            self.target_yaw_range
+        )
+
+        pitch = np.random.uniform(
+            -self.target_pitch_range,
+            self.target_pitch_range
+        )
+
+        roll = np.random.uniform(
+            -self.target_roll_range,
+            self.target_roll_range
+        )
+
+        position = Vector3r(x,y,z)
+        orientation = utils.to_quaternion(yaw, pitch, roll)
+
+        self.info['Target_vector'] = dict()
+        e1,e2,e3 = utils.to_orthogonal_vectors(orientation)
+        self.info['Target_vector']['e1'] = e1
+        self.info['Target_vector']['e2'] = e2
+        self.info['Target_vector']['e3'] = e3
+
+
 
         if self.drone.simListSceneObjects(name_regex=self.target_name):
-            position = Vector3r(x,y,z)
-            orientation = Quaternionr(0,0,0,0)
             self.drone.simSetObjectPose(self.target_name,Pose(position,orientation))
+        else:
+            raise Exception("There is no object with the given name in simulation environment")
         
-        return np.array([x,y,z],dtype=np.float32)
+        return (
+            np.array([x,y,z],dtype=np.float32),
+            np.array([orientation.w_val, orientation.x_val, orientation.y_val, orientation.z_val],
+                    dtype=np.float32)
+        )
     
     def _compute_state(self):
         k = self.drone.getMultirotorState().kinematics_estimated
@@ -228,29 +275,126 @@ class AirsimGymReachTargetContinuous(gym.Env):
 
     def _reward_done(self):
 
+        # distance = np.linalg.norm(self.state['position']
+        #                         - self.state['target_position'])
+
+        # delta_dinstance = self.pre_distance - distance
+        # reward = self.distance_coefficient * delta_dinstance
+        # self.pre_distance = distance
+
+        # if self.drone.simGetCollisionInfo().has_collided:
+        #     return self.accident_reward,True
+        
+        # axis_distance = (self.state['position'] - self.state['target_position'])
+        # x_axis_distance = axis_distance[0]
+        # y_axis_distance = axis_distance[1]
+        # z_axis_distance = axis_distance[2]
+
+
+        # if x_axis_distance>=0: # Passed from the gate plane
+        #     if abs(y_axis_distance) < 2.25 and abs(z_axis_distance)< 0.75: # passed through the gate
+        #         return self.success_reward,True
+        #     else:
+        #         return self.accident_reward/2,True
+        
+        # if distance > self.max_distance or self.timestep_count > self.max_timestep:
+        #     return self.time_or_distance_limit_passed_reward,True
+
+        # return reward,False
+
+        done = False
+
         distance = np.linalg.norm(self.state['position']
                                 - self.state['target_position'])
 
         delta_dinstance = self.pre_distance - distance
-        reward = self.distance_coefficient * delta_dinstance
         self.pre_distance = distance
 
+        w,x,y,z = self.state['orientation'][0],\
+                self.state['orientation'][1],\
+                self.state['orientation'][2],\
+                self.state['orientation'][3],
+
+        u1,u2,u3 = utils.to_orthogonal_vectors(Quaternionr(x,y,z,w))
+        e1 = self.info['Target_vector']['e1']
+        e2 = self.info['Target_vector']['e2']
+        e3 = self.info['Target_vector']['e3']
+
+        sp = self.state['target_position'] - self.state['position']
+
+        # ------------------------------ Facing the gap ------------------------------ #
+        angle_u1_sp,r1 = utils.get_angle(u1,sp)
+        self.info['angles'] = dict()
+        self.info['angles']['u1_sp'] = angle_u1_sp
+
+        # TODO Remember to add v0 and beta to this reward
+        # --------------------------------- Velocity --------------------------------- #
+        delta_time = self.cur_time-self.pre_time
+        r2 = (delta_dinstance/delta_time)
+        
+
+        # ------------------------------- Safety Angle ------------------------------- #
+        angle_e2_u2,t1 = utils.get_angle(e2,u2)
+        self.info['angles']['e2_u2'] = angle_e2_u2
+        t1 = -t1**2
+        angle_e3_u3,t2 = utils.get_angle(e3,u3)
+        self.info['angles']['e3_u3'] = angle_e3_u3
+        t2 = -t2**2
+        r3 = t1+t2
+
+        # ------------------------------- Safety Margin ------------------------------ #
+        r4 = - np.sqrt(np.dot(sp,e2)**2 + np.dot(sp,e3)**2)
+
+        # -------------------------- Passing through the gap ------------------------- #
+        theta,_ = utils.get_angle(sp,e1)
+        self.info['angles']['sp_e1'] = theta
+        if theta <= 0 or theta>=90 and abs(r4)<0.5:
+            r5 = 1
+            done = True
+        else:
+            r5 = 0
+        
         if self.drone.simGetCollisionInfo().has_collided:
-            return self.accident_reward,True
-        
-        axis_distance = (self.state['position'] - self.state['target_position'])
-        x_axis_distance = axis_distance[0]
-        y_axis_distance = axis_distance[1]
-        z_axis_distance = axis_distance[2]
+            done = True
+            r6 = -1
+        elif theta <= 0 or theta>=90 and abs(r4)>=0.5:
+            done = True
+            r6 = -0.5
+        else:
+            r6 = 0
 
+        w1 = 1
+        w2 = self.distance_coefficient
+        w3 = self._w3_calc(distance)
+        w4 = w3
+        w5 = self.success_reward
+        w6 = self.accident_reward
 
-        if x_axis_distance>=0: # Passed from the gate plane
-            if abs(y_axis_distance) < 2.25 and abs(z_axis_distance)< 0.75: # passed through the gate
-                return self.success_reward,True
-            else:
-                return self.accident_reward/2,True
-        
+        reward = w1*r1 + w2*r2 + w3*r3 + w4*r4 + w5*r5 + w6*r6
+
+        self.info['rewards'] = dict()
+        self.info['rewards']['r1'] = r1
+        self.info['rewards']['r2'] = r2
+        self.info['rewards']['r3'] = r3
+        self.info['rewards']['r4'] = r4
+        self.info['rewards']['r5'] = r5
+        self.info['rewards']['r6'] = r6
+
         if distance > self.max_distance or self.timestep_count > self.max_timestep:
             return self.time_or_distance_limit_passed_reward,True
+        
+        return reward,done
+    
 
-        return reward,False
+    def _w3_calc(self, distance):
+        return 1/(distance + 1)
+        
+        
+            
+
+
+
+
+
+
+        
