@@ -62,6 +62,17 @@ def to_quaternion(yaw, pitch, roll):
 
     return q
 
+def project_vector_on_plane(u1,e1,e2):
+    """
+    Project u1 on spanning plane of e1 and e2
+    """
+    u1 = u1/np.sqrt(np.dot(u1,u1))
+    e2 = e2/np.sqrt(np.dot(e2,e2))
+    e2 = e2/np.sqrt(np.dot(e2,e2))
+
+    return (np.dot(u1,e1)*e1) + (np.dot(u1,e2)*e2)
+
+
 if __name__ == "__main__":
     drone = air.MultirotorClient()
     drone.reset()
