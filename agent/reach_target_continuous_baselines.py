@@ -17,28 +17,56 @@ from stable_baselines3.common.vec_env import DummyVecEnv
 import torch
 
 from common.callbacks import RewardCallback
-from common.utils import arg_parser, save_model
+from common.utils import arg_parser, save_model, load_from_path
 
 args = arg_parser()
 
 
 if __name__ == "__main__":
 
+    current_time = time.strftime("%Y-%m-%d_%H-%M-%S")
+
+    net = [128 for _ in range(9)]
+
+    config = {
+        "environment":{
+            "id":"airsim-gym-reach-target-continuous-v0",
+            "target_x_movement_range":0,
+            "target_y_movement_range":0,
+            "target_z_movement_range":0,
+            "target_yaw_offset":0,
+            "target_pitch_offset":0,
+            "target_roll_offset":0,
+            "target_yaw_range":0,
+            "target_pitch_range":0,
+            "target_roll_range":48,
+            "accident_reward": 10,
+            "success_reward": 6000,
+            "time_or_distance_limit_passed_reward":-2,
+            "distance_coefficient" : 5,
+        },
+        "model":{
+            "algorithm": "sac",
+            "policy_kwargs" :dict(net_arch=[dict(pi=net, vf=net)])
+        },
+    }
+
     eval_env = gym.make(
-                    "airsim-gym-reach-target-continuous-v0",
-                    target_x_movement_range=0,
-                    target_y_movement_range=0,
-                    target_z_movement_range=0,
-                    target_yaw_offset=0,
-                    target_pitch_offset=0,
-                    target_roll_offset=0,
-                    target_yaw_range=0,
-                    target_pitch_range=0,
-                    target_roll_range=48,
-                    accident_reward= 10,
-                    success_reward= 6000,
-                    time_or_distance_limit_passed_reward=-2,
-                    distance_coefficient = 5
+                    # id="airsim-gym-reach-target-continuous-v0",
+                    # target_x_movement_range=0,
+                    # target_y_movement_range=0,
+                    # target_z_movement_range=0,
+                    # target_yaw_offset=0,
+                    # target_pitch_offset=0,
+                    # target_roll_offset=0,
+                    # target_yaw_range=0,
+                    # target_pitch_range=0,
+                    # target_roll_range=48,
+                    # accident_reward= 10,
+                    # success_reward= 6000,
+                    # time_or_distance_limit_passed_reward=-2,
+                    # distance_coefficient = 5
+                    **config["environment"]
                 )
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -107,7 +135,7 @@ if __name__ == "__main__":
 
             model.learn(
                 total_timesteps=args.timesteps,
-                tb_log_name="ppo_airsim_drone_run_" + str(time.time()),
+                tb_log_name="ppo_airsim_drone_run_" + current_time,
                 **kwargs
             )
 
@@ -137,7 +165,7 @@ if __name__ == "__main__":
                 env,
                 callback_on_new_best=None,
                 n_eval_episodes=5,
-                best_model_save_path=f"./models/best_models/continuous/sac/{time.strftime('%Y-%m-%d_%H-%M-%S')}",
+                best_model_save_path=f"./models/best_models/continuous/sac/{current_time}",
                 log_path=".",
                 eval_freq=10000,
             )
@@ -156,14 +184,16 @@ if __name__ == "__main__":
                 print('loading best model')
                 model = SAC.load("./models/best_models/continuous/sac/best_model",env)
             elif args.load:
-                print(f"loading model from {args.load}")
-                model = SAC.load(args.load,env)
+                # print(f"loading model from {args.load}")
+                # model = SAC.load(args.load,env)
+                model, config = load_from_path('sac',args.load)
+                model.set_env(env)
 
-            if args.replay:
-                print(f"loading replay buffer from {args.replay}")
-                model.load_replay_buffer(args.replay)
+            # if args.replay:
+            #     print(f"loading replay buffer from {args.replay}")
+            #     model.load_replay_buffer(args.replay)
 
-            print(model.policy)
+            print(model.policy_kwargs)
 
             model.gamma = 0.991
             model.batch_size = 1024
@@ -174,21 +204,15 @@ if __name__ == "__main__":
             try:
                 model.learn(
                     total_timesteps=args.timesteps,
-                    tb_log_name="sac_continuous_airsim_drone_run_" + time.strftime('%Y-%m-%d_%H-%M-%S'),
+                    tb_log_name="sac_continuous_airsim_drone_run_" + current_time,
                     **kwargs
                 )
-            except:
-                t = time.strftime("%Y-%m-%d_%H-%M-%S")
-                # print(f"saving data ...")
-                # model.save(f"latest/sac_{t}")
-                # model.save_replay_buffer(f"latest/sac_{t}_rep")
 
-                save_model(model, f"models/run_stopped/sac_{t}")
+                save_model(model,"models/train_finished/sac_continuous_airsim_drone_policy", config)
 
-            # model.save("sac_continuous_airsim_drone_policy")
-            # model.save_replay_buffer("sac_continuous_airsim_drone_policy_replay_buffer")
-
-            save_model(model,"models/train_finished/sac_continuous_airsim_drone_policy")
+            except (KeyboardInterrupt, Exception) as e:
+                print(e)
+                save_model(model, f"models/run_stopped/sac_{current_time}", config)
 
     if args.mode == 'eval':
         
