@@ -1,4 +1,5 @@
 import time
+import inspect
 import gym
 from gym import error, spaces, utils
 from gym.utils import seeding
@@ -34,7 +35,9 @@ class AirsimGymReachTargetContinuous(gym.Env):
     accident_reward= 10,
     success_reward= 100,
     time_or_distance_limit_passed_reward=-10,
-    distance_coefficient = 1) -> None:
+    distance_coefficient = 1,
+    w3_calc_fn = None,
+    w4_calc_fn = None) -> None:
         super().__init__()
 
         self.observation_space = spaces.Dict({
@@ -113,6 +116,8 @@ class AirsimGymReachTargetContinuous(gym.Env):
         """
 
         self.drone = air.MultirotorClient(ip=ip_address,port=port)
+        self.ip_address = ip_address
+        self.port = port
 
         self.target_init_x = target_init_x
         self.target_init_y = target_init_y
@@ -136,6 +141,8 @@ class AirsimGymReachTargetContinuous(gym.Env):
         self.success_reward = success_reward
         self.time_or_distance_limit_passed_reward = time_or_distance_limit_passed_reward
         self.distance_coefficient = distance_coefficient
+        self.w3_calc_fn = w3_calc_fn or self._w3_calc
+        self.w4_calc_fn = w4_calc_fn or self._w4_calc
 
         self.pre_time = time.time()
         self.cur_time = time.time()
@@ -368,8 +375,8 @@ class AirsimGymReachTargetContinuous(gym.Env):
 
         w1 = 0
         w2 = self.distance_coefficient
-        w3 = self._w3_calc(distance)
-        w4 = self._w4_calc(distance)
+        w3 = 1 #self._w3_calc(distance)
+        w4 = 1 #self._w4_calc(distance)
         w5 = self.success_reward
         w6 = self.accident_reward
 
@@ -419,3 +426,31 @@ class AirsimGymReachTargetContinuous(gym.Env):
 
     def _one_over_x_dist(self, distance, epsilon=0.1):
         return abs(1/(distance + epsilon))
+
+    def get_config(self) -> dict:
+        return {
+            "ip_address":self.ip_address,
+            "port":self.port,
+            "movement_size":self.movement_size,
+            "max_distance":self.max_distance,
+            "target_init_x":self.target_init_x,
+            "target_init_y":self.target_init_y,
+            "target_init_z":self.target_init_z,
+            "target_x_movement_range":self.target_x_movement_range,
+            "target_y_movement_range":self.target_y_movement_range,
+            "target_z_movement_range":self.target_z_movement_range,
+            "target_yaw_offset":self.target_yaw_offset,
+            "target_pitch_offset":self.target_pitch_offset,
+            "target_roll_offset":self.target_roll_offset,
+            "target_yaw_range":self.target_yaw_range,
+            "target_pitch_range":self.target_pitch_range,
+            "target_roll_range":self.target_roll_range,
+            "target_name":self.target_name,
+            "max_timestep":self.max_timestep,
+            "accident_reward": self.accident_reward,
+            "success_reward": self.success_reward,
+            "time_or_distance_limit_passed_reward": self.time_or_distance_limit_passed_reward,
+            "distance_coefficient" : self.distance_coefficient,
+            "w3_calc_fn": inspect.getsource(self.w3_calc_fn),
+            "w4_calc_fn": inspect.getsource(self.w4_calc_fn)
+        }
