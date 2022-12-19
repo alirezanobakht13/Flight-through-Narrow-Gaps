@@ -1,6 +1,7 @@
 from typing import Union, Optional, Dict, Text
 import json
 import argparse
+import os
 
 from stable_baselines3 import PPO,DQN,SAC
 
@@ -51,11 +52,11 @@ def arg_parser():
 def save_model(
     model: Union[PPO,DQN,SAC],
     path: Text,
-    detail: Optional[Dict]
+    config: Optional[Dict] = None
 ) -> None:
     """
     save the model to given path.
-    detail could contain information about:
+    config could contain information about:
     - reward weights
     - network architecture
     - gamma
@@ -63,15 +64,17 @@ def save_model(
     - ...
     """
 
-    print(f"saving model to {path}")
-    model.save(path)
+    if not os.path.exists(path):
+        os.makedirs(path)
+
+    print(f"saving model to {path}/model")
+    model.save(f"{path}/model")
 
     if isinstance(model,SAC) or isinstance(model,DQN):
-        print(f"save model replay buffer to {path}_rep")
-        model.save_replay_buffer(f"{path}_rep")
+        print(f"save model replay buffer to {path}/replay_buffer")
+        model.save_replay_buffer(f"{path}/replay_buffer")
     
-    if detail:
-        print(f"save model detail to {path}_detail")
-        with open(f"{path}_detail.json", "w") as f:
-            json.dump(detail,f,indent=4)
-
+    if config:
+        print(f"save model config to {path}/config")
+        with open(f"{path}/config.json", "w") as f:
+            json.dump(config,f,indent=4)
