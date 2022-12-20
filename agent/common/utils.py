@@ -21,7 +21,7 @@ def arg_parser():
     )
 
     parser.add_argument(
-        '-a'
+        '-a',
         '--algorithm',
         choices=['ppo', 'sac'],
         help="which RL algorithm you want for training or evaluating."
@@ -52,6 +52,38 @@ def arg_parser():
         '--config',
         help="load config file from the given path, or load default config if nothing is given.\n\
             note that if the variable is in both arguments and config file, argument one is selected."
+    )
+
+    parser.add_argument(
+        '-b',
+        '--batch_size',
+        help="batch size of RL algorithms"
+    )
+
+    parser.add_argument(
+        '-g',
+        '--gamma',
+        help="discount factor"
+    )
+
+    parser.add_argument(
+        '--lr',
+        help="learning rate"
+    )
+
+    parser.add_argument(
+        '--distance_coefficient',
+        help="distance coefficient"
+    )
+
+    parser.add_argument(
+        '--accident_reward',
+        help="accident reward (it should be positive. it will be negated in program)."
+    )
+
+    parser.add_argument(
+        '--success_reward',
+        help="success reward."
     )
 
     args = parser.parse_args()
@@ -142,6 +174,32 @@ def save_model(
             f.write("\n")
 
 
+def load_config_file(path: str) -> Tuple[Dict, Optional[Callable], Optional[Callable]]:
+    config = None
+
+    if os.path.exists(f"{path}"):
+        import sys
+        sys.path.append(f"{os.path.dirname(path)}")
+        from config_model_env import config as c
+        config = c
+        try:
+            from config_model_env import w3_calc
+            from config_model_env import w4_calc
+
+        except Exception as e:
+            print("No w3 and w4 function found in config file.\
+                    make sure their named w3_calc and w4_calc.")
+            w3_calc = None
+            w4_calc = None
+
+        sys.path.pop()
+
+    else:
+        print(f"config file doesn't exist: {path}")
+
+    return config, w3_calc, w4_calc
+
+
 def load_from_path(
         path: Text,
         algorithm: Optional[Text] = None
@@ -160,23 +218,7 @@ def load_from_path(
     if not os.path.exists(f"{path}/model.zip"):
         raise Exception("model doesn't exist.")
 
-    config = None
-
-    if os.path.exists(f"{path}/config_model_env.py"):
-        import sys
-        sys.path.append(f"{path}")
-        from config_model_env import config as c
-        config = c
-        try:
-            from config_model_env import w3_calc
-            from config_model_env import w4_calc
-
-        except Exception as e:
-            print("No w3 and w4 function found in config file.")
-            w3_calc = None
-            w4_calc = None
-
-        sys.path.pop()
+    config, w3_calc, w4_calc = load_config_file(path)
 
     if config and config.get('model', None):
         algorithm = algorithm or config['model'].get('algorithm', None)
@@ -204,3 +246,7 @@ def load_from_path(
             print(f"SAC replay buffer is loaded from {path}/replay_buffer.pkl")
 
     return model, config, w3_calc, w4_calc
+
+
+def setup():
+    args = arg_parser()
