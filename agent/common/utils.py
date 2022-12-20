@@ -58,6 +58,15 @@ def arg_parser():
     return args
 
 
+def source_indentation_correction(code: str) -> str:
+    index = code.find('def')
+    new_code = ''
+    for l in iter(code.splitlines()):
+        new_code += l[index:] + '\n'
+    
+    return new_code
+
+
 def save_model(
     model: Union[PPO, DQN, SAC],
     path: Text,
@@ -95,7 +104,9 @@ def save_model(
     if config:
 
         w3_calc_fn = config.pop("w3_calc_fn")
+        w3_calc_fn = source_indentation_correction(w3_calc_fn)
         w4_calc_fn = config.pop("w4_calc_fn")
+        w4_calc_fn = source_indentation_correction(w4_calc_fn)
 
         algo = None
         if isinstance(model, SAC):
