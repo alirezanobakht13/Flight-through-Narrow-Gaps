@@ -58,12 +58,19 @@ def arg_parser():
     return args
 
 
-def source_indentation_correction(code: str) -> str:
+def source_code_correction(code: str, is_w3: bool) -> str:
     index = code.find('def')
     new_code = ''
     for l in iter(code.splitlines()):
         new_code += l[index:] + '\n'
-    
+
+    par_index = new_code.find('(')
+
+    if is_w3:
+        new_code = new_code[:4] + 'w3_calc' + new_code[par_index:]
+    else:
+        new_code = new_code[:4] + 'w4_calc' + new_code[par_index:]
+
     return new_code
 
 
@@ -104,9 +111,9 @@ def save_model(
     if config:
 
         w3_calc_fn = config.pop("w3_calc_fn")
-        w3_calc_fn = source_indentation_correction(w3_calc_fn)
+        w3_calc_fn = source_code_correction(w3_calc_fn, True)
         w4_calc_fn = config.pop("w4_calc_fn")
-        w4_calc_fn = source_indentation_correction(w4_calc_fn)
+        w4_calc_fn = source_code_correction(w4_calc_fn, False)
 
         algo = None
         if isinstance(model, SAC):
@@ -126,7 +133,8 @@ def save_model(
 
         print(f"save model config to {path}/config_model_env")
         with open(f"{path}/config_model_env.py", "w") as f:
-            f.write("config = " + json.dumps(setting, indent=4))
+            f.write("config = " + json.dumps(setting, indent=4)
+                    .replace('false', 'False').replace('true', 'True').replace('null', 'None'))
             f.write("\n\n")
             f.write(w3_calc_fn)
             f.write("\n\n")
@@ -134,7 +142,13 @@ def save_model(
             f.write("\n")
 
 
-def load_from_path(algorithm: Text, path: Text) -> Tuple[Union[PPO, DQN, SAC], Optional[Dict], Optional[Callable], Optional[Callable]]:
+def load_from_path(
+        path: Text,
+        algorithm: Optional[Text] = None
+) -> Tuple[Union[PPO, DQN, SAC],
+           Optional[Dict],
+           Optional[Callable],
+           Optional[Callable]]:
     """
     load model (and config if exists) from given path.
     Note that algorithm of model should be defined.
@@ -145,6 +159,31 @@ def load_from_path(algorithm: Text, path: Text) -> Tuple[Union[PPO, DQN, SAC], O
     """
     if not os.path.exists(f"{path}/model.zip"):
         raise Exception("model doesn't exist.")
+
+    config = None
+
+    if os.path.exists(f"{path}/config_model_env.py"):
+        import sys
+        sys.path.append(f"{path}")
+        from config_model_env import config as c
+        config = c
+        try:
+            from config_model_env import w3_calc
+            from config_model_env import w4_calc
+
+        except Exception as e:
+            print("No w3 and w4 function found in config file.")
+            w3_calc = None
+            w4_calc = None
+
+        sys.path.pop()
+
+    if config and config.get('model', None):
+        algorithm = algorithm or config['model'].get('algorithm', None)
+
+    if algorithm is None:
+        raise Exception("RL algorithm is not defined.\
+            it should be given by CLI argument or exists in config file")
 
     if algorithm == 'dqn':
         model = DQN.load(f"{path}/model")
@@ -164,20 +203,4 @@ def load_from_path(algorithm: Text, path: Text) -> Tuple[Union[PPO, DQN, SAC], O
             model.load_replay_buffer(f"{path}/replay_buffer")
             print(f"SAC replay buffer is loaded from {path}/replay_buffer.pkl")
 
-    config = None
-
-    if os.path.exists(f"{path}/config_model_env.py"):
-        import sys
-        sys.path.append(f"{path}")
-        from config_model_env import config as c
-        config = c
-        try:
-            from config_model_env import w3_calc_fn
-            from config_model_env import w4_calc_fn
-        except:
-            w3_calc_fn = None
-            w4_calc_fn = None
-
-        sys.path.pop()
-
-    return model, config, w3_calc_fn, w4_calc_fn
+    return model, config, w3_calc, w4_calc
