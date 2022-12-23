@@ -1,9 +1,19 @@
+# --------------------------- Python related stuff --------------------------- #
 from typing import Union, Optional, Dict, Text, Tuple, Callable
 import json
 import argparse
 import os
 
+# ------------------- Stable-baseline modules and functions ------------------ #
 from stable_baselines3 import PPO, DQN, SAC
+from stable_baselines3.common.monitor import Monitor
+from stable_baselines3.common.vec_env import DummyVecEnv
+
+import torch
+
+# ------------------------ Gym and custom environment ------------------------ #
+import gym
+import airsim_gym
 
 
 def arg_parser():
@@ -67,7 +77,7 @@ def arg_parser():
     )
 
     parser.add_argument(
-        '--lr',
+        '--learning_rate',
         help="learning rate"
     )
 
@@ -178,26 +188,24 @@ def load_config_file(path: str) -> Tuple[Dict, Optional[Callable], Optional[Call
     config = None
 
     if os.path.exists(f"{path}"):
-        import sys
-        sys.path.append(f"{os.path.dirname(path)}")
-        from config_model_env import config as c
-        config = c
-        try:
-            from config_model_env import w3_calc
-            from config_model_env import w4_calc
+        from importlib.machinery import SourceFileLoader
+        config_py = SourceFileLoader(os.path.splitext(
+            os.path.basename(path))[0], path).load_module()
 
-        except Exception as e:
-            print("No w3 and w4 function found in config file.\
-                    make sure their named w3_calc and w4_calc.")
-            w3_calc = None
-            w4_calc = None
+    return config_py.config, config_py.w3_calc, config_py.w4_calc
 
-        sys.path.pop()
 
-    else:
-        print(f"config file doesn't exist: {path}")
-
-    return config, w3_calc, w4_calc
+def get(name: Union[dict, None], *args: str):
+    """
+    nested get. None is returned if last or each of middle elements doesn't exist.
+    """
+    if not name:
+        return None
+    for i in args:
+        name = name.get(i, None)
+        if name is None:
+            return None
+    return name
 
 
 def load_from_path(
@@ -218,10 +226,10 @@ def load_from_path(
     if not os.path.exists(f"{path}/model.zip"):
         raise Exception("model doesn't exist.")
 
-    config, w3_calc, w4_calc = load_config_file(path)
+    config, w3_calc, w4_calc = load_config_file(f"{path}/config_model_env.py")
 
     if config and config.get('model', None):
-        algorithm = algorithm or config['model'].get('algorithm', None)
+        algorithm = config['model'].get('algorithm', None) or algorithm
 
     if algorithm is None:
         raise Exception("RL algorithm is not defined.\
@@ -249,4 +257,99 @@ def load_from_path(
 
 
 def setup():
+    """
+    setting up environment and model.
+    config of environment and model will be selected in the following order:
+    1 - argument given by CLI
+    2 - config file given in CLI
+    3 - config file loaded when loading model
+    4 - default config file
+    5 - None. default value of model and environment itself will be chosen if available, error will be thrown otherwise.
+    """
+    environment_parameters = ['ip_address', 'port', 'movement_size', 'max_distance', 'target_init_x',
+                              'target_init_y', 'target_init_z', 'target_x_movement_range',
+                              'target_y_movement_range', 'target_z_movement_range', 'target_yaw_offset',
+                              'target_pitch_offset', 'target_roll_offset', 'target_yaw_range',
+                              'target_pitch_range', 'target_roll_range', 'max_timestep', 'accident_reward',
+                              'success_reward', 'time_or_distance_limit_passed_reward', 'distance_coefficient']
+
+    model_parameters = ['algorithm', 'gamma', 'learning_rate',
+                        'batch_size', 'policy_kwargs', 'tensorboard_log']
+
     args = arg_parser()
+
+    config_c, w3_calc_c, w4_calc_c = None, None, None
+
+    if args.config:
+        config_c, w3_calc_c, w4_calc_c = load_config_file(args.config)
+
+    config_d, w3_calc_d, w4_calc_d = load_config_file("./default_config.py")
+
+    config_l, w3_calc_l, w4_calc_l = None, None, None
+    model = None
+
+    if args.load:
+        model, config_l, w3_calc_l, w4_calc_l = load_from_path(args.load)
+
+    main_config = {
+        "environment": {},
+        "model": {}
+    }
+
+    for env_var in environment_parameters:
+        temp = get(args, env_var) or \
+            get(config_c, 'environment', env_var) or \
+            get(config_l, 'environment', env_var) or \
+            get(config_d, 'environment', env_var) or None
+
+        if temp:
+            main_config['environment'][env_var] = temp
+
+    for model_var in model_parameters:
+        temp = get(args, model_var) or \
+            get(config_c, 'model', model_var) or \
+            get(config_l, 'model', model_var) or \
+            get(config_d, 'model', model_var) or None
+
+        if temp:
+            main_config['model'][model_var] = temp
+
+    main_config['environment']['w3_calc'] = w3_calc_c or w3_calc_l or w3_calc_d or None
+    main_config['environment']['w4_calc'] = w4_calc_c or w4_calc_l or w4_calc_d or None
+
+    env = gym.make(**main_config['environment'])
+    envs = DummyVecEnv(
+        [
+            lambda: Monitor(
+                env
+            )
+        ]
+    )
+
+    if not args.load:
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        if main_config['model']['algorithm'] == 'sac':
+            model = SAC(
+                "MultiInputPolicy",
+                envs,
+                verbose=get(args, 'verbose') or 1,
+                device=device,
+                **main_config['model']
+            )
+
+        elif main_config['model']['algorithm'] == 'ppo':
+            model = PPO(
+                envs,
+                verbose=get(args, 'verbose') or 1,
+                device=device,
+                **main_config['model']
+            )
+
+        else:
+            raise Exception("Neither model is loaded nor model is given.")
+
+    else:
+        for model_var in main_config['model']:
+            model[model_var] = main_config['model'][model_var]
+
+    return model, env, envs, args

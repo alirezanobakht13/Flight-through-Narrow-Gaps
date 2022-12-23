@@ -16,6 +16,11 @@ config = {
         "distance_coefficient": 5
     },
     "model": {
+        "algorithm": "sac",
+        "gamma": 0.99,
+        "learning_rate": None,
+        "batch_size": 512,
+        "tensorboard_log":'./tb_logs/',
         "policy_kwargs": {
             "net_arch": [
                 {
@@ -41,7 +46,6 @@ config = {
                     ]
                 }
             ]
-        },
-        "algorithm": "sac"
+        }
     }
 }
