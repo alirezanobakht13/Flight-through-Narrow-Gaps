@@ -36,7 +36,7 @@ elif args.mode == 'train':
         env,
         callback_on_new_best=None,
         n_eval_episodes=5,
-        best_model_save_path=f"./models/best_models/continuous/sac/{current_time}",
+        best_model_save_path=f"./models/best_models/continuous/{config['model']['algorithm']}/{current_time}",
         log_path=".",
         eval_freq=10000,
     )
@@ -45,7 +45,7 @@ elif args.mode == 'train':
 
     checkpoint_callback = CheckpointCallback(save_freq=10000,
                                              save_path='./models/checkpoints/continuous',
-                                             name_prefix='sac')
+                                             name_prefix=f"{config['model']['algorithm']}")
     callbacks.append(checkpoint_callback)
 
     kwargs = {}
@@ -53,13 +53,15 @@ elif args.mode == 'train':
 
     try:
         model.learn(
-                    total_timesteps=args.timesteps,
-                    tb_log_name="sac_run_" + current_time,
-                    **kwargs
-                )
+            total_timesteps=args.timesteps,
+            tb_log_name=f"{config['model']['algorithm']}_run_" + current_time,
+            **kwargs
+        )
 
-        save_model(model,f"models/train_finished/sac_{current_time}", config)
+        save_model(
+            model, f"models/train_finished/{config['model']['algorithm']}_{current_time}", config)
 
     except (KeyboardInterrupt, Exception) as e:
         logging.error("Exception occurred", exc_info=True)
-        save_model(model, f"models/run_stopped/sac_{current_time}", config)
+        save_model(
+            model, f"models/run_stopped/{config['model']['algorithm']}_{current_time}", config)
