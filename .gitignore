@@ -1,6 +1,5 @@
 # my stuff
 check.ipynb
-Examples/tb_logs
 *.npz
 checkpoints
 run_stopped

@@ -157,11 +157,11 @@ def save_model(
         w3_calc_fn, w4_calc_fn = '', ''
 
         if 'w3_calc_fn' in config['environment']:
-            if get(config,'environment', 'w3_calc_fn'):
+            if get(config, 'environment', 'w3_calc_fn'):
                 w3_calc_fn = config['environment']["w3_calc_fn"]
                 w3_calc_fn = source_code_correction(w3_calc_fn, True)
             config['environment'].pop('w3_calc_fn')
-        
+
         if 'w4_calc_fn' in config['environment']:
             if get(config, 'environment', 'w4_calc_fn'):
                 w4_calc_fn = config['environment']["w4_calc_fn"]
@@ -333,7 +333,7 @@ def setup():
     main_config['environment']['w3_calc_fn'] = w3_calc_c or w3_calc_l or w3_calc_d or None
     main_config['environment']['w4_calc_fn'] = w4_calc_c or w4_calc_l or w4_calc_d or None
 
-    logging.info(json.dumps(main_config, indent=4))
+    logging.info(f"config = {json.dumps(main_config, indent=4)}")
 
     env = gym.make(**main_config['environment'])
     envs = DummyVecEnv(
@@ -350,32 +350,20 @@ def setup():
         if main_config['model']['algorithm'] == 'sac':
             main_config['model'].pop('algorithm')
 
-
-            # net = [128 for _ in range(9)]
-            # # policy_kwargs = dict(net_arch=dict(qf=[400, 300], pi=[64, 64]))
-            # policy_kwargs = {
-            #     'net_arch':{
-            #         "pi": [64,64],
-            #         "qf": [128,128]
-            #     }
-            # }
-
-
             model = SAC(
                 "MultiInputPolicy",
                 envs,
-                verbose=namespace_get(args,'verbose') or 1,
+                verbose=namespace_get(args, 'verbose') or 1,
                 device=device,
                 **main_config['model']
             )
-            logging.info(model.policy_kwargs)
             main_config['model']['algorithm'] = 'sac'
 
         elif main_config['model']['algorithm'] == 'ppo':
             main_config['model'].pop('algorithm')
             model = PPO(
                 envs,
-                verbose=namespace_get(args,'verbose') or 1,
+                verbose=namespace_get(args, 'verbose') or 1,
                 device=device,
                 **main_config['model']
             )
