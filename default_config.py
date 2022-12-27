@@ -20,32 +20,40 @@ config = {
         "gamma": 0.99,
         "learning_rate": None,
         "batch_size": 512,
-        "tensorboard_log":'./tb_logs/',
-        "policy_kwargs": {
-            "net_arch": [
-                {
-                    "pi": [
-                        256,
-                        256,
-                        256,
-                        256,
-                        256,
-                        256,
-                        256,
-                        256
-                    ],
-                    "vf": [
-                        256,
-                        256,
-                        256,
-                        256,
-                        256,
-                        256,
-                        256,
-                        256
-                    ]
-                }
-            ]
+        "tensorboard_log": './tb_logs/',
+        "policy_kwargs": { # read https://stable-baselines3.readthedocs.io/en/v1.0/guide/custom_policy.html
+            "net_arch": {
+                "pi": [  # policy network
+                    256,
+                    256,
+                    256,
+                    256,
+                    256,
+                    256,
+                    256,
+                    256
+                ],
+                # "vf": [ # value network (for PPO)
+                #     256,
+                #     256,
+                #     256,
+                #     256,
+                #     256,
+                #     256,
+                #     256,
+                #     256
+                # ],
+                "qf": [  # critic network (for SAC, DDPG, TD3)
+                    256,
+                    256,
+                    256,
+                    256,
+                    256,
+                    256,
+                    256,
+                    256
+                ]
+            }
         }
     }
 }

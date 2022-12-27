@@ -141,8 +141,8 @@ class AirsimGymReachTargetContinuous(gym.Env):
         self.success_reward = success_reward
         self.time_or_distance_limit_passed_reward = time_or_distance_limit_passed_reward
         self.distance_coefficient = distance_coefficient
-        self.w3_calc_fn = w3_calc_fn or self._w3_calc
-        self.w4_calc_fn = w4_calc_fn or self._w4_calc
+        self.w3_calc_fn = w3_calc_fn or _w3_calc
+        self.w4_calc_fn = w4_calc_fn or _w4_calc
 
         self.pre_time = time.time()
         self.cur_time = time.time()
@@ -412,20 +412,6 @@ class AirsimGymReachTargetContinuous(gym.Env):
             return self.time_or_distance_limit_passed_reward,True
         
         return reward,done
-    
-    def _w3_calc(self, distance):
-        # return self._normal_dist(distance, sd=3)
-        return self._one_over_x_dist(distance)
-
-    def _w4_calc(self, distance):
-        # return self._normal_dist(distance, sd=1)
-        return self._one_over_x_dist(distance)
-
-    def _normal_dist(self, x, mean=0, sd=2):
-        return (1/(np.sqrt(2*np.pi)*sd)) * np.exp(-0.5*((x-mean)/sd)**2)
-
-    def _one_over_x_dist(self, distance, epsilon=0.1):
-        return abs(1/(distance + epsilon))
 
     def get_config(self) -> dict:
         return {
@@ -451,6 +437,23 @@ class AirsimGymReachTargetContinuous(gym.Env):
             "success_reward": self.success_reward,
             "time_or_distance_limit_passed_reward": self.time_or_distance_limit_passed_reward,
             "distance_coefficient" : self.distance_coefficient,
+
+            # TODO: Extra indentation problem where default function are used.
             "w3_calc_fn": inspect.getsource(self.w3_calc_fn),
             "w4_calc_fn": inspect.getsource(self.w4_calc_fn)
         }
+
+def _w3_calc(distance):
+    # return _normal_dist(distance, sd=3)
+    return _one_over_x_dist(distance)
+
+def _w4_calc(distance):
+    # return _normal_dist(distance, sd=1)
+    return _one_over_x_dist(distance)
+
+def _normal_dist(x, mean=0, sd=2):
+    return (1/(np.sqrt(2*np.pi)*sd)) * np.exp(-0.5*((x-mean)/sd)**2)
+
+def _one_over_x_dist(distance, epsilon=0.1):
+    return abs(1/(distance + epsilon))
+
