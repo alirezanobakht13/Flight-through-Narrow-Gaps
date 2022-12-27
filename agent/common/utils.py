@@ -99,6 +99,21 @@ def arg_parser():
         help="success reward."
     )
 
+    parser.add_argument(
+        '--time_or_distance_limit_passed_reward',
+        help='time or distance limit passed reward (should be negative)'
+    )
+
+    parser.add_argument(
+        '--max_timestep',
+        help='maximum timesteps that agent is allowed to do action in a single episode'
+    )
+
+    parser.add_argument(
+        '--max_distance',
+        help='maximum distance that agent could be from the gap'
+    )
+
     args = parser.parse_args()
     return args
 
@@ -374,6 +389,9 @@ def setup():
 
     else:
         for model_var in main_config['model']:
-            model[model_var] = main_config['model'][model_var]
+            if model_var in ['algorithm', 'policy_kwargs']:
+                continue
+            model.__setattr__(model_var, main_config['model'][model_var])
+            model.set_env(envs)
 
     return model, env, envs, main_config, args
