@@ -3,6 +3,7 @@ from typing import Union, Optional, Dict, Text, Tuple, Callable
 import json
 import argparse
 import os
+import logging
 
 # ------------------- Stable-baseline modules and functions ------------------ #
 from stable_baselines3 import PPO, DQN, SAC
@@ -14,6 +15,8 @@ import torch
 # ------------------------ Gym and custom environment ------------------------ #
 import gym
 import airsim_gym
+
+logging.basicConfig(format='%(asctime)s - %(message)s', level=logging.DEBUG)
 
 
 def arg_parser():
@@ -143,39 +146,31 @@ def save_model(
     if not os.path.exists(path):
         os.makedirs(path)
 
-    print(f"saving model to {path}/model")
+    logging.info(f"saving model to {path}/model")
     model.save(f"{path}/model")
 
     if isinstance(model, SAC) or isinstance(model, DQN):
-        print(f"save model replay buffer to {path}/replay_buffer")
+        logging.info(f"save model replay buffer to {path}/replay_buffer")
         model.save_replay_buffer(f"{path}/replay_buffer")
 
     if config:
+        w3_calc_fn, w4_calc_fn = '', ''
 
-        w3_calc_fn = config.pop("w3_calc_fn")
-        w3_calc_fn = source_code_correction(w3_calc_fn, True)
-        w4_calc_fn = config.pop("w4_calc_fn")
-        w4_calc_fn = source_code_correction(w4_calc_fn, False)
+        if 'w3_calc_fn' in config['environment']:
+            if get(config,'environment', 'w3_calc_fn'):
+                w3_calc_fn = config['environment']["w3_calc_fn"]
+                w3_calc_fn = source_code_correction(w3_calc_fn, True)
+            config['environment'].pop('w3_calc_fn')
+        
+        if 'w4_calc_fn' in config['environment']:
+            if get(config, 'environment', 'w4_calc_fn'):
+                w4_calc_fn = config['environment']["w4_calc_fn"]
+                w4_calc_fn = source_code_correction(w4_calc_fn, False)
+            config['environment'].pop('w4_calc_fn')
 
-        algo = None
-        if isinstance(model, SAC):
-            algo = 'sac'
-        elif isinstance(model, PPO):
-            algo = 'ppo'
-        elif isinstance(model, DQN):
-            algo = 'dqn'
-
-        setting = {
-            "environment": config,
-            "model": {
-                "algorithm": algo,
-                "policy_kwargs": model.policy_kwargs
-            }
-        }
-
-        print(f"save model config to {path}/config_model_env")
+        logging.info(f"save model config to {path}/config_model_env")
         with open(f"{path}/config_model_env.py", "w") as f:
-            f.write("config = " + json.dumps(setting, indent=4)
+            f.write("config = " + json.dumps(config, indent=4)
                     .replace('false', 'False').replace('true', 'True').replace('null', 'None'))
             f.write("\n\n")
             f.write(w3_calc_fn)
@@ -188,24 +183,33 @@ def load_config_file(path: str) -> Tuple[Dict, Optional[Callable], Optional[Call
     config = None
 
     if os.path.exists(f"{path}"):
+        print(path)
         from importlib.machinery import SourceFileLoader
-        config_py = SourceFileLoader(os.path.splitext(
+        config = SourceFileLoader(os.path.splitext(
             os.path.basename(path))[0], path).load_module()
 
-    return config_py.config, config_py.w3_calc, config_py.w4_calc
+    if not config:
+        return None, None, None
+
+    return config.config, (config.w3_calc if 'w3_calc' in dir(config) else None), \
+        (config.w4_calc if 'w4_calc' in dir(config) else None)
 
 
 def get(name: Union[dict, None], *args: str):
     """
     nested get. None is returned if last or each of middle elements doesn't exist.
     """
-    if not name:
+    if name is None:
         return None
     for i in args:
         name = name.get(i, None)
         if name is None:
             return None
     return name
+
+
+def namespace_get(namespace, attr):
+    return namespace.__getattribute__(attr) if attr in dir(namespace) else None
 
 
 def load_from_path(
@@ -237,21 +241,23 @@ def load_from_path(
 
     if algorithm == 'dqn':
         model = DQN.load(f"{path}/model")
-        print(f"DQN model is loaded from {path}/model.zip")
+        logging.info(f"DQN model is loaded from {path}/model.zip")
         if os.path.exists(f"{path}/replay_buffer.pkl"):
             model.load_replay_buffer(f"{path}/replay_buffer")
-            print(f"DQN replay buffer is loaded from {path}/replay_buffer.pkl")
+            logging.info(
+                f"DQN replay buffer is loaded from {path}/replay_buffer.pkl")
 
     elif algorithm == 'ppo':
         model = PPO.load(f"{path}/model")
-        print(f"PPO model is loaded from {path}/model.zip")
+        logging.info(f"PPO model is loaded from {path}/model.zip")
 
     elif algorithm == "sac":
         model = SAC.load(f"{path}/model")
-        print(f"SAC model is loaded from {path}/model.zip")
+        logging.info(f"SAC model is loaded from {path}/model.zip")
         if os.path.exists(f"{path}/replay_buffer.pkl"):
             model.load_replay_buffer(f"{path}/replay_buffer")
-            print(f"SAC replay buffer is loaded from {path}/replay_buffer.pkl")
+            logging.info(
+                f"SAC replay buffer is loaded from {path}/replay_buffer.pkl")
 
     return model, config, w3_calc, w4_calc
 
@@ -266,7 +272,7 @@ def setup():
     4 - default config file
     5 - None. default value of model and environment itself will be chosen if available, error will be thrown otherwise.
     """
-    environment_parameters = ['ip_address', 'port', 'movement_size', 'max_distance', 'target_init_x',
+    environment_parameters = ['id', 'ip_address', 'port', 'movement_size', 'max_distance', 'target_init_x',
                               'target_init_y', 'target_init_z', 'target_x_movement_range',
                               'target_y_movement_range', 'target_z_movement_range', 'target_yaw_offset',
                               'target_pitch_offset', 'target_roll_offset', 'target_yaw_range',
@@ -283,7 +289,7 @@ def setup():
     if args.config:
         config_c, w3_calc_c, w4_calc_c = load_config_file(args.config)
 
-    config_d, w3_calc_d, w4_calc_d = load_config_file("./default_config.py")
+    config_d, w3_calc_d, w4_calc_d = load_config_file("../default_config.py")
 
     config_l, w3_calc_l, w4_calc_l = None, None, None
     model = None
@@ -297,25 +303,37 @@ def setup():
     }
 
     for env_var in environment_parameters:
-        temp = get(args, env_var) or \
-            get(config_c, 'environment', env_var) or \
-            get(config_l, 'environment', env_var) or \
-            get(config_d, 'environment', env_var) or None
+        temp = None
+        if namespace_get(args, env_var) is not None:
+            temp = namespace_get(args, env_var)
+        elif get(config_c, 'environment', env_var) is not None:
+            temp = get(config_c, 'environment', env_var)
+        elif get(config_l, 'environment', env_var) is not None:
+            temp = get(config_l, 'environment', env_var)
+        elif get(config_d, 'environment', env_var) is not None:
+            temp = get(config_d, 'environment', env_var)
 
-        if temp:
+        if temp is not None:
             main_config['environment'][env_var] = temp
 
     for model_var in model_parameters:
-        temp = get(args, model_var) or \
-            get(config_c, 'model', model_var) or \
-            get(config_l, 'model', model_var) or \
-            get(config_d, 'model', model_var) or None
+        temp = None
+        if namespace_get(args, model_var) is not None:
+            temp = namespace_get(args, model_var)
+        elif get(config_c, 'model', model_var) is not None:
+            temp = get(config_c, 'model', model_var)
+        elif get(config_l, 'model', model_var) is not None:
+            temp = get(config_l, 'model', model_var)
+        elif get(config_d, 'model', model_var) is not None:
+            temp = get(config_d, 'model', model_var)
 
-        if temp:
+        if temp is not None:
             main_config['model'][model_var] = temp
 
-    main_config['environment']['w3_calc'] = w3_calc_c or w3_calc_l or w3_calc_d or None
-    main_config['environment']['w4_calc'] = w4_calc_c or w4_calc_l or w4_calc_d or None
+    main_config['environment']['w3_calc_fn'] = w3_calc_c or w3_calc_l or w3_calc_d or None
+    main_config['environment']['w4_calc_fn'] = w4_calc_c or w4_calc_l or w4_calc_d or None
+
+    logging.info(json.dumps(main_config, indent=4))
 
     env = gym.make(**main_config['environment'])
     envs = DummyVecEnv(
@@ -328,22 +346,40 @@ def setup():
 
     if not args.load:
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        # device = 'cpu'
         if main_config['model']['algorithm'] == 'sac':
+            main_config['model'].pop('algorithm')
+
+
+            # net = [128 for _ in range(9)]
+            # # policy_kwargs = dict(net_arch=dict(qf=[400, 300], pi=[64, 64]))
+            # policy_kwargs = {
+            #     'net_arch':{
+            #         "pi": [64,64],
+            #         "qf": [128,128]
+            #     }
+            # }
+
+
             model = SAC(
                 "MultiInputPolicy",
                 envs,
-                verbose=get(args, 'verbose') or 1,
+                verbose=namespace_get(args,'verbose') or 1,
                 device=device,
                 **main_config['model']
             )
+            logging.info(model.policy_kwargs)
+            main_config['model']['algorithm'] = 'sac'
 
         elif main_config['model']['algorithm'] == 'ppo':
+            main_config['model'].pop('algorithm')
             model = PPO(
                 envs,
-                verbose=get(args, 'verbose') or 1,
+                verbose=namespace_get(args,'verbose') or 1,
                 device=device,
                 **main_config['model']
             )
+            main_config['model']['algorithm'] == 'ppo'
 
         else:
             raise Exception("Neither model is loaded nor model is given.")
@@ -352,4 +388,4 @@ def setup():
         for model_var in main_config['model']:
             model[model_var] = main_config['model'][model_var]
 
-    return model, env, envs, args
+    return model, env, envs, main_config, args
