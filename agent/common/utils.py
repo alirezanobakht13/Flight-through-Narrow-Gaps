@@ -4,6 +4,7 @@ import json
 import argparse
 import os
 import logging
+import inspect
 
 # ------------------- Stable-baseline modules and functions ------------------ #
 from stable_baselines3 import PPO, DQN, SAC
@@ -70,55 +71,101 @@ def arg_parser():
     parser.add_argument(
         '-b',
         '--batch_size',
+        type=int,
         help="batch size of RL algorithms"
     )
 
     parser.add_argument(
         '-g',
         '--gamma',
+        type=float,
         help="discount factor"
     )
 
     parser.add_argument(
         '--learning_rate',
+        type=float,
         help="learning rate"
     )
 
     parser.add_argument(
         '--distance_coefficient',
+        type=float,
         help="distance coefficient"
     )
 
     parser.add_argument(
         '--accident_reward',
+        type=float,
         help="accident reward (it should be positive. it will be negated in program)."
     )
 
     parser.add_argument(
         '--success_reward',
+        type=float,
         help="success reward."
     )
 
     parser.add_argument(
         '--time_or_distance_limit_passed_reward',
+        type=float,
         help='time or distance limit passed reward (should be negative)'
     )
 
     parser.add_argument(
         '--max_timestep',
+        type=int,
         help='maximum timesteps that agent is allowed to do action in a single episode'
     )
 
     parser.add_argument(
         '--max_distance',
+        type=float,
         help='maximum distance that agent could be from the gap'
+    )
+
+    parser.add_argument(
+        '--target_x_movement_range',
+        type=float,
+        help="movement range of the gap in the 'x' axis"
+    )
+
+    parser.add_argument(
+        '--target_y_movement_range',
+        type=float,
+        help="movement range of the gap in the 'y' axis"
+    )
+
+    parser.add_argument(
+        '--target_z_movement_range',
+        type=float,
+        help="movement range of the gap in the 'z' axis"
+    )
+
+    parser.add_argument(
+        '--target_init_x',
+        type=float,
+        help="initial place of the gap on the x axis"
+    )
+
+    parser.add_argument(
+        '--target_init_y',
+        type=float,
+        help="initial place of the gap on the y axis"
+    )
+
+    parser.add_argument(
+        '--target_init_z',
+        type=float,
+        help="initial place of the gap on the z axis"
     )
 
     args = parser.parse_args()
     return args
 
 
-def source_code_correction(code: str, is_w3: bool) -> str:
+def source_code_correction(code: callable, is_w3: bool) -> str:
+    code = inspect.getsource(code)
     index = code.find('def')
     new_code = ''
     for l in iter(code.splitlines()):
@@ -345,10 +392,10 @@ def setup():
         if temp is not None:
             main_config['model'][model_var] = temp
 
+    logging.info(f"config = {json.dumps(main_config, indent=4)}")
+
     main_config['environment']['w3_calc_fn'] = w3_calc_c or w3_calc_l or w3_calc_d or None
     main_config['environment']['w4_calc_fn'] = w4_calc_c or w4_calc_l or w4_calc_d or None
-
-    logging.info(f"config = {json.dumps(main_config, indent=4)}")
 
     env = gym.make(**main_config['environment'])
     envs = DummyVecEnv(
