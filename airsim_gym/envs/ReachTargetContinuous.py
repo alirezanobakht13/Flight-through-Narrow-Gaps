@@ -1,5 +1,4 @@
 import time
-import inspect
 import gym
 from gym import error, spaces, utils
 from gym.utils import seeding
@@ -149,6 +148,7 @@ class AirsimGymReachTargetContinuous(gym.Env):
         self.pre_distance = 0
 
         self.info = dict()
+        self.info['rewards'] = dict()
 
     def reset(self):
         self.drone.reset()
@@ -375,8 +375,8 @@ class AirsimGymReachTargetContinuous(gym.Env):
 
         w1 = 0
         w2 = self.distance_coefficient
-        w3 = 1 #self._w3_calc(distance)
-        w4 = 1 #self._w4_calc(distance)
+        w3 = self.w3_calc_fn(distance)
+        w4 = self.w4_calc_fn(distance)
         w5 = self.success_reward
         w6 = self.accident_reward
 
@@ -384,7 +384,6 @@ class AirsimGymReachTargetContinuous(gym.Env):
 
         self.info['distance'] = distance
 
-        self.info['rewards'] = dict()
         self.info['rewards']['r1'] = r1
         self.info['rewards']['r2'] = r2
         self.info['rewards']['r3'] = r3
@@ -409,7 +408,10 @@ class AirsimGymReachTargetContinuous(gym.Env):
         self.info['done'] = done
 
         if distance > self.max_distance or self.timestep_count > self.max_timestep:
+            self.info['rewards']['R'] = self.time_or_distance_limit_passed_reward
             return self.time_or_distance_limit_passed_reward,True
+        
+        self.info['rewards']['R'] = reward
         
         return reward,done
 
@@ -437,10 +439,8 @@ class AirsimGymReachTargetContinuous(gym.Env):
             "success_reward": self.success_reward,
             "time_or_distance_limit_passed_reward": self.time_or_distance_limit_passed_reward,
             "distance_coefficient" : self.distance_coefficient,
-
-            # TODO: Extra indentation problem where default function are used.
-            "w3_calc_fn": inspect.getsource(self.w3_calc_fn),
-            "w4_calc_fn": inspect.getsource(self.w4_calc_fn)
+            "w3_calc_fn": self.w3_calc_fn,
+            "w4_calc_fn": self.w4_calc_fn
         }
 
 def _w3_calc(distance):
