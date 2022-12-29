@@ -194,6 +194,8 @@ class AirsimGymReachTargetContinuous(gym.Env):
 
         self.pre_time = self.cur_time
 
+        self._print_message_simulator()
+
         return self.state,reward,done,self.info
 
     def render(self,mode='rgb_array'):
@@ -253,6 +255,17 @@ class AirsimGymReachTargetContinuous(gym.Env):
             np.array([orientation.w_val, orientation.x_val, orientation.y_val, orientation.z_val],
                     dtype=np.float32)
         )
+
+    def _print_message_simulator(self):
+        # self.drone.simPrintLogMessage("wr1: ",str(self.info['rewards']['wr1']))
+        self.drone.simPrintLogMessage("Velocity      wr2: ",str(self.info['rewards']['wr2']))
+        self.drone.simPrintLogMessage("Safety Angle  wr3: ",str(self.info['rewards']['wr3']))
+        self.drone.simPrintLogMessage("Safety Margin wr4: ",str(self.info['rewards']['wr4']))
+        self.drone.simPrintLogMessage("              wr5: ",str(self.info['rewards']['wr5']))
+        self.drone.simPrintLogMessage("              wr6: ",str(self.info['rewards']['wr6']))
+        self.drone.simPrintLogMessage("     total reward: ",str(self.info['rewards']['R']))
+
+
     
     def _compute_state(self):
         k = self.drone.getMultirotorState().kinematics_estimated
@@ -338,7 +351,9 @@ class AirsimGymReachTargetContinuous(gym.Env):
 
         # ------------------------------- Safety Margin ------------------------------ #
         margin = np.sqrt(np.dot(sp,e2)**2 + np.dot(sp,e3)**2)
-        r4 = 1/((margin/10)+0.04)
+        # r4 = 1/((margin/10)+0.04)
+        r4 = -margin
+        sp_project_on_e1 = np.linalg.norm(utils.project_vec_on_vec(sp,e1))
 
         # -------------------------- Passing through the gap ------------------------- #
         theta,_ = utils.get_angle(sp,e1)
@@ -347,13 +362,6 @@ class AirsimGymReachTargetContinuous(gym.Env):
             r5 = 1
             done = True
             self.info['success'] = True
-            print(f"success final state: {self.state['position']}")
-            print(f"theta: {theta}")
-            print(f"sp: {sp}")
-            print(f"margin: {margin}")
-            print(f"u2: {u2}")
-            print(f"e2: {e2}")
-            print(f"angle_e2_u2: {angle_e2_u2}")
         else:
             r5 = 0
         
@@ -362,23 +370,20 @@ class AirsimGymReachTargetContinuous(gym.Env):
             r6 = -1
         elif (theta < 0 or theta > 90) and abs(margin)>=0.4:
             done = True
-            r6 = -0.5
-            print(f"fail final state: {self.state['position']}")
-            print(f"theta: {theta}")
-            print(f"sp: {sp}")
-            print(f"margin: {margin}")
-            print(f"u2: {u2}")
-            print(f"e2: {e2}")
-            print(f"angle_e2_u2: {angle_e2_u2}")
+            # r6 = -0.5
+            r6 = 0
         else:
             r6 = 0
 
         w1 = 0
         w2 = self.distance_coefficient
         w3 = self.w3_calc_fn(distance)
-        w4 = self.w4_calc_fn(distance)
+        w4 = self.w4_calc_fn(sp_project_on_e1)
         w5 = self.success_reward
         w6 = self.accident_reward
+
+        if done:
+            r2 = 0
 
         reward = w1*r1 + w2*r2 + w3*r3 + w4*r4 + w5*r5 + w6*r6
 
