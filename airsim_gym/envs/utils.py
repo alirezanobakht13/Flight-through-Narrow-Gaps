@@ -72,6 +72,14 @@ def project_vector_on_plane(u1,e1,e2):
 
     return (np.dot(u1,e1)*e1) + (np.dot(u1,e2)*e2)
 
+def project_vec_on_vec(u1,u2):
+    """
+    Project u1 on u2
+    """
+    return np.dot(u1,(u2/np.sqrt(np.linalg.norm(u2))))
+
+
+
 
 if __name__ == "__main__":
     drone = air.MultirotorClient()
