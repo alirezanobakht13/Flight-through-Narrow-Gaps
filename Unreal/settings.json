@@ -1,0 +1,12 @@
+{
+  "SeeDocsAt": "https://github.com/Microsoft/AirSim/blob/master/docs/settings.md",
+  "SettingsVersion": 1.2,
+  "SimMode": "Multirotor",
+  "ViewMode":"SpringArmChase",
+  "ClockSpeed": 1,
+  "OriginGeopoint": {
+    "Latitude": 0,
+    "Longitude": 0,
+    "Altitude": 400
+  }
+}
