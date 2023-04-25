@@ -76,7 +76,7 @@ and for the last one you have to change values inside `setting.json` in AirSim s
 - `target_init_x`: initial position of the gap in the **x** axis.
 - `target_init_y`
 - `target_init_z`
-- `target_x_movement_range`: range of gap displacement with respect to initial position in **x** axis. gap position in x axis will be randomly chosen from $[target\_init\_x - target\_x\_movement\_range, target\_init\_x + target\_x\_movement\_range]$.
+- `target_x_movement_range`: range of gap displacement with respect to initial position in **x** axis. gap position in x axis will be randomly chosen from `[target_init_x - target_x_movement_range, target_init_x + target_x_movement_range]`.
 - `target_y_movement_range`
 - `target_z_movement_range`
 - `target_yaw_offset`: initial yaw of the gap.
